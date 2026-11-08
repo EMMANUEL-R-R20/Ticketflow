@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
 import crypto from "node:crypto";
+import nodemailer from "nodemailer";
 
 const router = Router();
 
@@ -17,7 +18,8 @@ function firmarToken(usuario) {
   );
 }
 
-const sha256 = (texto) => crypto.createHash("sha256").update(texto).digest("hex");
+const sha256 = (texto) =>
+  crypto.createHash("sha256").update(texto).digest("hex");
 
 // Respuesta única de /recuperar: es la misma exista o no el correo
 const RESPUESTA = {
@@ -25,9 +27,69 @@ const RESPUESTA = {
     "Si el correo está registrado, te enviamos las instrucciones para recuperar tu contraseña.",
 };
 
-function enviarEnlace(correo, enlace) {
-  // Modo desarrollo: el enlace se imprime en la consola del servidor
-  console.log(`[recuperación] ${correo}: ${enlace}`);
+let transporte; // se crea la primera vez que se usa
+function obtenerTransporte() {
+  if (!process.env.MAIL_HOST) return null;
+  transporte ??= nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT ?? 2525),
+    auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS },
+  });
+  return transporte;
+}
+
+async function enviarEnlace(correo, enlace) {
+  const envio = obtenerTransporte();
+  if (!envio) {
+    // Sin servidor de correo configurado: el enlace se imprime en la consola
+    console.log(`[recuperación] ${correo}: ${enlace}`);
+    return;
+  }
+  try {
+    await envio.sendMail({
+      from:
+        process.env.MAIL_FROM ?? "TicketFlow <no-responder@ticketflow.local>",
+      to: correo,
+      subject: "Recupera tu contraseña · TicketFlow",
+      text:
+        `Crea una contraseña nueva abriendo este enlace (vale 30 minutos y solo se puede usar una vez):\n${enlace}\n\n` +
+        "Si no pediste este cambio, ignora este correo: tu contraseña seguirá igual.",
+      html: `<!doctype html>
+<html lang="es"><body style="margin:0;padding:0;background-color:#F3F4F6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F3F4F6;padding:32px 12px;">
+<tr><td align="center">
+  <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background-color:#FFFFFF;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+    <tr><td style="background-color:#5B21B6;padding:24px 32px;">
+      <div style="font-size:24px;font-weight:bold;color:#FFFFFF;letter-spacing:.5px;">TicketFlow</div>
+      <div style="font-size:12px;color:#DDD6FE;margin-top:2px;">Boletería digital</div>
+    </td></tr>
+    <tr><td style="padding:32px 32px 8px 32px;">
+      <h1 style="margin:0 0 12px 0;font-size:22px;line-height:28px;color:#111827;">Crea una contraseña nueva</h1>
+      <p style="margin:0 0 24px 0;font-size:15px;line-height:23px;color:#374151;">Recibimos una solicitud para restablecer la contraseña de tu cuenta. Pulsa el botón para elegir una nueva.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;"><tr>
+        <td style="background-color:#6D28D9;border-radius:8px;">
+          <a href="${enlace}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:bold;color:#FFFFFF;text-decoration:none;">Crear contraseña nueva</a>
+        </td></tr></table>
+      <p style="margin:0 0 24px 0;font-size:13px;line-height:20px;color:#6B7280;">Este enlace vale <b>30 minutos</b> y solo se puede usar una vez.</p>
+      <hr style="border:none;border-top:1px solid #E5E7EB;margin:0 0 16px 0;">
+      <p style="margin:0 0 6px 0;font-size:12px;line-height:18px;color:#6B7280;">¿El botón no funciona? Copia y pega este enlace en tu navegador:</p>
+      <p style="margin:0 0 24px 0;font-size:12px;line-height:18px;color:#6D28D9;word-break:break-all;font-family:Consolas,'Courier New',monospace;">${enlace}</p>
+    </td></tr>
+    <tr><td style="background-color:#F9FAFB;padding:18px 32px;border-top:1px solid #E5E7EB;">
+      <p style="margin:0 0 4px 0;font-size:12px;line-height:18px;color:#6B7280;">Si no pediste este cambio, ignora este correo: tu contraseña seguirá igual.</p>
+      <p style="margin:0;font-size:12px;line-height:18px;color:#9CA3AF;">TicketFlow · Proyecto integrador</p>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`,
+    });
+  } catch (error) {
+    // Un fallo del correo no debe tumbar la ruta ni delatar si el correo existe
+    console.error(
+      "No se pudo enviar el correo de recuperación:",
+      error.message,
+    );
+  }
 }
 
 // POST /api/auth/registro
@@ -113,11 +175,9 @@ router.post("/registro", async (req, res) => {
   } catch (error) {
     await client.query("ROLLBACK");
     if (error.code === "23505") {
-      return res
-        .status(409)
-        .json({
-          error: "Ya existe un usuario con esa identificación o ese correo",
-        });
+      return res.status(409).json({
+        error: "Ya existe un usuario con esa identificación o ese correo",
+      });
     }
     if (error.code === "23503") {
       return res.status(400).json({ error: "La ciudad indicada no existe" });
@@ -175,7 +235,9 @@ router.post("/login", async (req, res) => {
 
 // POST /api/auth/recuperar
 router.post("/recuperar", async (req, res) => {
-  const correo = String(req.body?.correo ?? "").trim().toLowerCase();
+  const correo = String(req.body?.correo ?? "")
+    .trim()
+    .toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(correo)) {
     return res.status(400).json({ error: "Escribe un correo válido" });
   }
@@ -189,7 +251,7 @@ router.post("/recuperar", async (req, res) => {
       [correo],
     );
     if (rows[0]) {
-      const token = crypto.randomBytes(32).toString("hex");   // 64 caracteres
+      const token = crypto.randomBytes(32).toString("hex"); // 64 caracteres
       await pool.query(
         "UPDATE recuperacion_contrasena SET usado = TRUE WHERE persona_id = $1 AND usado = FALSE",
         [rows[0].identificacion],
@@ -202,7 +264,7 @@ router.post("/recuperar", async (req, res) => {
       const base = process.env.APP_URL ?? "http://localhost:8443";
       enviarEnlace(correo, `${base}/restablecer?token=${token}`);
     }
-    res.json(RESPUESTA);          // la misma respuesta exista o no el correo
+    res.json(RESPUESTA); // la misma respuesta exista o no el correo
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "No se pudo procesar la solicitud" });
@@ -217,7 +279,9 @@ router.post("/restablecer", async (req, res) => {
     return res.status(400).json({ error: INVALIDO });
   }
   if (typeof contrasena !== "string" || contrasena.length < 6) {
-    return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres" });
+    return res
+      .status(400)
+      .json({ error: "La contraseña debe tener al menos 6 caracteres" });
   }
   const client = await pool.connect();
   try {
@@ -242,7 +306,9 @@ router.post("/restablecer", async (req, res) => {
       [rows[0].persona_id],
     );
     await client.query("COMMIT");
-    res.json({ mensaje: "Tu contraseña se actualizó. Ya puedes iniciar sesión." });
+    res.json({
+      mensaje: "Tu contraseña se actualizó. Ya puedes iniciar sesión.",
+    });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error(error);
