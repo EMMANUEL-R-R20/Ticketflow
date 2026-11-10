@@ -104,7 +104,7 @@ export function LandingPage({
       {/* Hero */}
       <section
         ref={heroRef}
-        className="relative overflow-hidden pt-28 pb-20 lg:pt-32 lg:pb-24 border-b-[3px] border-violet-600"
+        className="relative overflow-hidden pt-28 pb-20 lg:pt-32 lg:pb-24"
         style={{ background: NAV }}
       >
         <div className="absolute inset-0 overflow-hidden">
@@ -223,7 +223,7 @@ export function LandingPage({
               <div
                 key={s.t}
                 data-reveal
-                className="flex flex-col items-center text-center p-5 rounded-2xl bg-white border border-gray-200 border-t-[3px] border-t-violet-700"
+                className="flex flex-col items-center text-center p-5 rounded-2xl bg-white border border-gray-200 shadow-sm"
               >
                 <div
                   className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-3"
@@ -244,7 +244,7 @@ export function LandingPage({
       </section>
 
       {/* Cómo funciona */}
-      <section className="py-12 border-t-4 border-violet-700">
+      <section className="py-12 bg-white">
         <div className="max-w-6xl mx-auto px-5 sm:px-8">
           <div
             data-reveal
@@ -287,7 +287,7 @@ export function LandingPage({
               <div
                 key={s.n}
                 data-reveal
-                className="flex items-start gap-4 p-5 rounded-2xl bg-white border border-gray-200 border-t-[3px] border-t-violet-700 hover:shadow-md transition"
+                className="flex items-start gap-4 p-5 rounded-2xl bg-[#F5F6FA] border border-gray-200 shadow-sm hover:shadow-md transition"
               >
                 <div
                   className="w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-xl"
@@ -313,7 +313,7 @@ export function LandingPage({
       </section>
 
       {/* Featured Events */}
-      <section className="py-12 border-t-4 border-violet-700" id="eventos">
+      <section className="py-12" id="eventos">
         <div className="max-w-6xl mx-auto px-5 sm:px-8">
           <div
             data-reveal
@@ -349,7 +349,7 @@ export function LandingPage({
       {/* Footer */}
       <footer
         style={{ background: NAV }}
-        className="pt-10 pb-6 text-gray-400 text-sm border-t-[3px] border-violet-600"
+        className="pt-10 pb-6 text-gray-400 text-sm"
       >
         <div className="max-w-6xl mx-auto px-5 sm:px-8">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-8 pb-10 border-b border-white/10">
