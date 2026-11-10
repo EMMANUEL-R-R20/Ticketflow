@@ -9,12 +9,16 @@ Plataforma web de boletería digital: explorar eventos, reservar entradas y gest
 - **Frontend:** React 19 + TypeScript + Vite + Tailwind CSS
 - **Backend:** Node.js + Express (API REST)
 - **Base de datos:** PostgreSQL, alojada en [Neon](https://neon.com)
+- **Pagos:** Stripe Checkout, en modo de prueba (guía en [PAGOS_STRIPE.md](PAGOS_STRIPE.md))
+- **Correo:** Nodemailer, para enviar el enlace de recuperación de contraseña (guía en [CORREO_RECUPERACION.md](CORREO_RECUPERACION.md))
 
 ## Estructura del repositorio
 
 ```
 Ticketflow/
 ├── package.json          → comandos para correr todo desde la raíz (npm run dev)
+├── PAGOS_STRIPE.md       → guía de los pagos con Stripe
+├── CORREO_RECUPERACION.md → guía del correo de recuperación de contraseña
 ├── frontend/             → la página (React)
 │   └── src/
 │       ├── models/
@@ -25,14 +29,16 @@ Ticketflow/
 │       └── utils/        → funciones de ayuda (formato, cupo, colores, animaciones)
 └── backend/              → la API
     ├── database/
-    │   └── schema.sql    → estructura de la base de datos (DDL)
+    │   ├── schema.sql    → estructura de la base de datos (DDL)
+    │   └── divipola.csv  → departamentos y municipios de Colombia (fuente: DANE)
     ├── env.example       → plantilla de variables de entorno
     └── src/
         ├── index.js      → servidor Express
         ├── db.js         → conexión a PostgreSQL
         ├── seed.js       → carga de datos de ejemplo
+        ├── municipios.js → carga de los municipios de Colombia
         ├── middleware/   → sesión (token) y permisos por rol
-        └── routes/       → auth, catalogos, eventos, reservas, reportes, perfil, personas
+        └── routes/       → auth, catalogos, eventos, reservas, pagos, reportes, perfil, personas
 ```
 
 El frontend sigue un patrón inspirado en MVC: los **modelos** piden los datos a la API, las **vistas** son componentes sin lógica de negocio, y los **controladores** (las páginas) conectan ambos. Las páginas nunca usan `fetch` directamente.
@@ -62,6 +68,8 @@ npm run instalar
    - `DATABASE_URL`: la cadena de conexión de la base de datos en Neon. Se pide por mensaje privado a quien creó el proyecto. **El archivo `.env` no se sube a GitHub**, porque contiene claves privadas. Nunca la pegues en un chat grupal, un commit o una captura.
    - `JWT_SECRET`: cualquier texto largo y secreto, usado para firmar los tokens de sesión.
    - `PORT`: el puerto de la API (4000 por defecto).
+   - Opcional, **pagos**: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` y `FRONTEND_URL`. Se explican en [PAGOS_STRIPE.md](PAGOS_STRIPE.md). Sin ellas todo lo demás funciona y solo los pagos avisan que no están configurados.
+   - Opcional, **correo**: `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS` y `MAIL_FROM`. Se explican en [CORREO_RECUPERACION.md](CORREO_RECUPERACION.md). Sin `MAIL_HOST`, el enlace de recuperación de contraseña se imprime en la terminal del backend.
 
 ### 3. Correr el proyecto
 
@@ -101,7 +109,28 @@ npm run seed
 
 ### Crear la base de datos desde cero (solo si hace falta)
 
-La estructura completa está en `backend/database/schema.sql`. Para crearla en un proyecto nuevo de Neon, se pega el contenido de ese archivo en el **SQL Editor** de Neon y se ejecuta. Después se corre `npm run seed`.
+La estructura completa está en `backend/database/schema.sql`. Para crearla en un proyecto nuevo de Neon, se pega el contenido de ese archivo en el **SQL Editor** de Neon y se ejecuta. Después se corre `npm run municipios` (para cargar los municipios de Colombia, ver abajo) y `npm run seed`.
+
+### Cargar los municipios de Colombia
+
+Con `schema.sql` la base trae solo tres ciudades (Bogotá, Medellín y Cali). Para cargar todos los departamentos y municipios de Colombia, se usa el archivo oficial del DANE (DIVIPOLA) que está en `backend/database/divipola.csv`:
+
+```
+cd backend
+npm run municipios -- --simular
+npm run municipios
+```
+
+El primer comando es una **simulación**: lee el archivo y dice qué haría, sin escribir nada. El segundo hace la carga.
+
+- Es **solo Colombia**: se crea un único país.
+- Se omiten las áreas no municipalizadas, y **Bogotá se mantiene dentro de Cundinamarca**, sin departamento aparte.
+- Reconoce «Santiago de Cali» como la Cali que ya existe, así no se duplica.
+- **Se puede ejecutar varias veces:** lo que ya está no se vuelve a agregar. Todo va en una transacción: o se carga todo o no se carga nada.
+- Al terminar quedan **32 departamentos y 1.104 ciudades**. Solo agrega filas, no borra nada.
+- `npm run seed` **no** borra los municipios.
+
+Fuente de los datos: DANE, [DIVIPOLA – Códigos municipios](https://www.datos.gov.co/d/gdxc-w37w) (datos abiertos de Colombia, licencia CC BY-SA 4.0).
 
 ## Cuentas de ejemplo
 
@@ -121,9 +150,24 @@ Los clientes y agentes nuevos se crean desde «Crear cuenta», eligiendo el tipo
 
 | Perfil            | Acciones                                                                                                                                                                                                                                                                                                                                                                                 |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cliente**       | Ver los eventos disponibles y su detalle, reservar entradas (con el cupo validado), ver sus reservas, **editarlas** (mientras estén «Reservada») y **cancelarlas con motivo**, y editar su perfil (dirección, ciudad y teléfonos)                                                                                                                                                        |
+| **Cliente**       | Ver los eventos disponibles y su detalle, reservar entradas (con el cupo validado), ver sus reservas, **editarlas** (mientras estén «Reservada»), **cancelarlas con motivo**, **pagarlas** con tarjeta (Stripe, modo de prueba) y editar su perfil (dirección, ciudad y teléfonos)                                                                                                       |
 | **Agente**        | Registrar, editar y eliminar eventos (con fecha de finalización, imagen y ubicación), ver todos los eventos, y administrar las reservas: confirmar, cancelar con motivo, reactivar, editar y eliminar las canceladas                                                                                                                                                                     |
 | **Administrador** | Panel con los **9 reportes** (registros, ingresos por mes, reservas por evento y por mes, eventos por agente y ciudad, promedios de ingresos por agente y por cliente, cobertura geográfica, historial de reservas y cancelaciones con su causa), y las pantallas **Usuarios** (crear, editar y eliminar personas de cualquier rol) y **Ubicaciones** (países, departamentos y ciudades) |
+
+Cualquier persona puede recuperar su contraseña desde «¿Olvidaste tu contraseña?» en el inicio de sesión: recibe un enlace de un solo uso que vale 30 minutos (ver [CORREO_RECUPERACION.md](CORREO_RECUPERACION.md)).
+
+## Direcciones de la página
+
+La página usa direcciones reales (URLs). Si alguien abre la de un perfil sin haber iniciado sesión, se lo lleva al inicio de sesión y, al entrar, se vuelve a la dirección que pidió.
+
+| Perfil        | Direcciones                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Público       | `/` · `/login` · `/registro` · `/recuperar` · `/restablecer`                                                                         |
+| Cliente       | `/cliente` · `/cliente/eventos` · `/cliente/eventos/:id` · `/cliente/eventos/:id/reservar` · `/cliente/reservas` · `/cliente/perfil` |
+| Agente        | `/agente` · `/agente/eventos` · `/agente/eventos/nuevo` · `/agente/eventos/:id/editar` · `/agente/reservas` · `/agente/perfil`       |
+| Administrador | `/admin` · `/admin/usuarios` · `/admin/ubicaciones` · `/admin/perfil`                                                                |
+
+Para agregar una pantalla hay que sumarla al tipo `Screen` (`frontend/src/models/types/index.ts`) y a `frontend/src/utils/routes.ts`.
 
 ## La API
 
@@ -132,7 +176,7 @@ Todas las rutas responden en JSON. Las que no son públicas piden el token que s
 | Área      | Ruta                                                               | Quién puede usarla                                |
 | --------- | ------------------------------------------------------------------ | ------------------------------------------------- |
 | Estado    | `GET /api/salud`                                                   | Público                                           |
-| Sesión    | `POST /api/auth/registro` y `POST /api/auth/login`                 | Público                                           |
+| Sesión    | `POST /api/auth/registro`, `/login`, `/recuperar` y `/restablecer` | Público                                           |
 | Ubicación | `GET /api/paises`, `/api/departamentos`, `/api/ciudades`           | Público                                           |
 | Ubicación | `POST`, `PUT` y `DELETE` en esas tres rutas                        | Administrador                                     |
 | Eventos   | `GET /api/eventos` y `GET /api/eventos/:id`                        | Público                                           |
@@ -141,6 +185,8 @@ Todas las rutas responden en JSON. Las que no son públicas piden el token que s
 | Reservas  | `GET /api/reservas` y `DELETE /api/reservas/:id` (solo canceladas) | Agente                                            |
 | Reservas  | `PUT /api/reservas/:id` (entradas y observaciones)                 | Cliente (las suyas, en estado Reservada) y agente |
 | Reservas  | `PATCH /api/reservas/:id/estado`                                   | Cliente (solo cancelar las suyas) y agente        |
+| Pagos     | `POST /api/pagos/checkout` y `POST /api/pagos/confirmar`           | Cliente (dueño de la reserva)                     |
+| Pagos     | `POST /api/pagos/webhook`                                          | Stripe (con la firma verificada)                  |
 | Perfil    | `GET` y `PUT /api/perfil`                                          | Cualquier persona con sesión                      |
 | Personas  | `GET`, `POST`, `PUT` y `DELETE /api/personas`                      | Administrador                                     |
 | Reportes  | `GET /api/reportes/...` (9 reportes)                               | Administrador                                     |
@@ -153,6 +199,8 @@ Reglas principales:
 - **Cancelaciones:** una reserva cancelada se conserva con su motivo; solo el agente puede eliminarla. Un evento cancelado exige su motivo en las observaciones.
 - **Protección de datos:** no se elimina a una persona con reservas o eventos, ni un evento con reservas, ni una ubicación en uso.
 - **Reportes:** los ingresos cuentan solo las reservas confirmadas, agrupadas por la fecha de la reserva.
+- **Pagos:** el monto lo calcula el servidor y una reserva solo pasa a «Confirmada» si Stripe confirma el pago. Los datos de la tarjeta nunca pasan por TicketFlow (detalle en [PAGOS_STRIPE.md](PAGOS_STRIPE.md)).
+- **Recuperación de contraseña:** el enlace es de un solo uso y vence a los 30 minutos; en la base se guarda solo su huella (SHA-256), nunca el enlace. La respuesta es la misma exista o no el correo, para no revelar qué cuentas existen.
 
 ## Cómo usa la página la API
 
@@ -165,20 +213,15 @@ Todo el acceso al servidor está en `frontend/src/models/api/`:
 
 ## Base de datos
 
-La base tiene 12 tablas, basadas en el modelo entidad-relación del equipo:
+La base tiene 13 tablas: 12 basadas en el modelo entidad-relación del equipo y una para la recuperación de contraseña:
 
 - **Ubicación:** `pais`, `departamento` y `ciudad`.
 - **Estados:** `estado_evento` y `estado_reserva`.
 - **Personas:** `persona`, con sus teléfonos en `telefono_persona`, y las tres especializaciones `cliente`, `agente` y `administrador`.
-- **Negocio:** `evento` y `reserva`.
+- **Negocio:** `evento` y `reserva` (esta última incluye `stripe_session_id` y `fecha_pago`, del pago con Stripe).
+- **Recuperación de contraseña:** `recuperacion_contrasena`, que guarda la huella del enlace, cuándo vence y si ya se usó.
 
-La estructura completa (DDL) está en `backend/database/schema.sql`. Por ahora la base trae tres ciudades (Bogotá, Medellín y Cali); más países, departamentos y ciudades se agregan desde la pantalla **Ubicaciones**.
-
-## Pendiente
-
-- Cargar los departamentos y municipios de Colombia (a la espera de definir si el sistema cubre solo Colombia o más países).
-- Otras tarjetas del Sprint, a cargo de otros integrantes: pagos y saldo, recuperación de contraseña, navegación con URLs reales y accesibilidad.
-- Mejoras menores: sugerencias de teatros al escribir el lugar de un evento, y que los puntos del cliente y la comisión del agente tengan lógica.
+La estructura completa (DDL) está en `backend/database/schema.sql`. Con ese archivo la base trae tres ciudades (Bogotá, Medellín y Cali); al cargar los municipios (ver «Cargar los municipios de Colombia») quedan 32 departamentos y 1.104 ciudades. Más ubicaciones se agregan desde la pantalla **Ubicaciones**.
 
 ## Historial de desarrollo
 
@@ -196,3 +239,9 @@ El proyecto se construyó en ramas sucesivas, que se pueden revisar en el histor
 10. Reestructura en carpetas `frontend/` y `backend/` (`Reestructura-carpetas`)
 11. Backend: base de datos en Neon y API (`Backend-api`)
 12. Frontend conectado a la API (`Frontend-api`)
+13. Navegación con URLs reales
+14. Pagos con Stripe (`Stripe-pagos`)
+15. Recuperación de contraseña (`Recuperacion-contrasena`)
+16. Envío del enlace de recuperación por correo (`Recuperacion-correo`)
+17. Carga de los municipios de Colombia (`Municipios-colombia`)
+18. README y guía del correo de recuperación (`Readme-y-ajuste-de-diseno`)
