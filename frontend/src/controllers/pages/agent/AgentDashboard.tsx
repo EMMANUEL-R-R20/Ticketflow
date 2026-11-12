@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { Screen, Role, Evento, Reserva } from "../../../models/types";
 import { fmtPrice, fmtDate, unsplash } from "../../../utils/format";
 import { Btn } from "../../../views/components/Btn";
@@ -7,17 +8,20 @@ import { PageHeader } from "../../../views/layouts/PageHeader";
 
 // ─── AGENT DASHBOARD ─────────────────────────────────────────────────────────
 export function AgentDashboard({
-  onNav,
   eventos,
   reservas,
+  misIds,
 }: {
   onNav: (s: Screen, r?: Role, eventId?: number | null) => void;
   eventos: Evento[];
   reservas: Reserva[];
+  // Ids de los eventos de este agente; null mientras se cargan
+  misIds: number[] | null;
 }) {
-  const reservasValidas = reservas.filter((r) =>
-    eventos.some((e) => e.id === r.eventoId),
-  );
+  // Las cifras y listas del panel son solo las de este agente
+  const propios = useMemo(() => new Set(misIds ?? []), [misIds]);
+  const misEventos = eventos.filter((e) => propios.has(e.id));
+  const reservasValidas = reservas.filter((r) => propios.has(r.eventoId));
   return (
     <>
       <PageHeader
@@ -27,13 +31,13 @@ export function AgentDashboard({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
         <StatCard
           label="Eventos registrados"
-          value={eventos.length}
+          value={misEventos.length}
           icon="🎭"
           color="violet"
         />
         <StatCard
           label="Eventos activos"
-          value={eventos.filter((e) => e.estado === "En Boletería").length}
+          value={misEventos.filter((e) => e.estado === "En Boletería").length}
           icon="✅"
           color="emerald"
         />
@@ -59,10 +63,12 @@ export function AgentDashboard({
             Mis eventos recientes
           </h3>
           <div className="space-y-3">
-            {eventos.length === 0 && (
-              <p className="text-sm text-gray-400">Todavía no hay eventos.</p>
+            {misEventos.length === 0 && (
+              <p className="text-sm text-gray-400">
+                Todavía no has creado eventos.
+              </p>
             )}
-            {eventos.slice(0, 4).map((ev) => (
+            {misEventos.slice(0, 4).map((ev) => (
               <div
                 key={ev.id}
                 className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0"
@@ -97,7 +103,7 @@ export function AgentDashboard({
               <p className="text-sm text-gray-400">Todavía no hay reservas.</p>
             )}
             {reservasValidas.slice(0, 4).map((r) => {
-              const ev = eventos.find((e) => e.id === r.eventoId)!;
+              const ev = misEventos.find((e) => e.id === r.eventoId)!;
               return (
                 <div
                   key={r.id}

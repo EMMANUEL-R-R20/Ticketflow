@@ -54,6 +54,7 @@ import {
   mensajeDeError,
   sesion,
 } from "../models/api/cliente";
+import { listarMisEventos } from "../models/api/misEventos";
 import { Btn } from "../views/components/Btn";
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
@@ -101,6 +102,7 @@ export default function App() {
       sesionActiva.current = false;
       setUsuarioActual(null);
       setReservas([]);
+      setMisEventosIds([]);
       setAvisoSesion("Tu sesión expiró. Inicia sesión de nuevo.");
       navigate("/login");
     }
@@ -136,6 +138,9 @@ export default function App() {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [cargandoEventos, setCargandoEventos] = useState(true);
   const [errorEventos, setErrorEventos] = useState("");
+  // Ids de los eventos que creó el agente que inició sesión (null mientras se cargan).
+  // El listado público no trae quién creó cada evento; el agente lo pide aparte.
+  const [misEventosIds, setMisEventosIds] = useState<number[] | null>([]);
 
   function cargarEventos() {
     setCargandoEventos(true);
@@ -247,6 +252,7 @@ export default function App() {
   async function registrarEvento(datos: DatosEvento): Promise<void> {
     const nuevo = await crearEvento(datos);
     setEventos((prev) => [...prev, nuevo]);
+    setMisEventosIds((prev) => [...(prev ?? []), nuevo.id]);
   }
 
   async function actualizarEvento(
@@ -261,12 +267,20 @@ export default function App() {
   async function eliminarEvento(id: number): Promise<void> {
     await eliminarEventoApi(id);
     setEventos((prev) => prev.filter((e) => e.id !== id));
+    setMisEventosIds((prev) => (prev ?? []).filter((x) => x !== id));
   }
 
   function loginExitoso(u: UsuarioActual, irAlInicio = true) {
     sesionActiva.current = true;
     setAvisoSesion("");
     setUsuarioActual(u);
+    // Solo el agente tiene «eventos propios»: se piden aparte (null = cargando)
+    setMisEventosIds(u.role === "agent" ? null : []);
+    if (u.role === "agent") {
+      listarMisEventos()
+        .then(setMisEventosIds)
+        .catch(() => setMisEventosIds([]));
+    }
     // El cliente ve sus reservas reales; agentes y administrador siguen con las
     // de ejemplo hasta que se conecten sus pantallas
     if (u.role === "client") {
@@ -306,6 +320,7 @@ export default function App() {
     sesion.borrar();
     setUsuarioActual(null);
     setReservas([]);
+    setMisEventosIds([]);
   }
 
   function nav(s: Screen, r?: Role, eventId?: number | null) {
@@ -459,14 +474,25 @@ export default function App() {
     return (
       <DashboardLayout role="agent" screen={screen} onNav={nav} user={user}>
         {screen === "agent-dashboard" && (
-          <AgentDashboard onNav={nav} eventos={eventos} reservas={reservas} />
+          <AgentDashboard
+            onNav={nav}
+            eventos={eventos}
+            reservas={reservas}
+            misIds={misEventosIds}
+          />
         )}
         {screen === "agent-register-event" &&
           (eventoSeleccionadoId !== null &&
-          !eventos.some((e) => e.id === eventoSeleccionadoId) ? (
+          (misEventosIds === null ||
+            !eventos.some((e) => e.id === eventoSeleccionadoId) ||
+            !misEventosIds.includes(eventoSeleccionadoId)) ? (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
               <p className="text-gray-600 mb-5">
-                Este evento ya no está disponible.
+                {misEventosIds === null
+                  ? "Cargando…"
+                  : !eventos.some((e) => e.id === eventoSeleccionadoId)
+                    ? "Este evento ya no está disponible."
+                    : "Este evento es de otro agente: solo puedes editar los tuyos."}
               </p>
               <Btn onClick={() => nav("agent-my-events")}>
                 ← Volver a mis eventos
@@ -485,6 +511,7 @@ export default function App() {
           <AgentMyEvents
             onNav={nav}
             eventos={eventos}
+            misIds={misEventosIds}
             eliminarEvento={eliminarEvento}
           />
         )}
@@ -493,6 +520,7 @@ export default function App() {
             onNav={nav}
             reservas={reservas}
             eventos={eventos}
+            misIds={misEventosIds}
             cambiarEstadoReserva={cambiarEstadoReserva}
             cancelarReserva={cancelarReserva}
             editarReserva={editarReserva}

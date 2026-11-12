@@ -156,7 +156,8 @@ router.get("/mias", verificarToken, exigirRol("cliente"), async (req, res) => {
   }
 });
 
-// GET /api/reservas — todas las reservas, para el agente
+// GET /api/reservas — todas las reservas, para el agente. Puede consultarlas todas, pero solo
+// administra (cambiar estado, editar, eliminar) las de los eventos que él creó.
 router.get("/", verificarToken, exigirRol("agente"), async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -215,7 +216,7 @@ router.patch(
         throw new ErrorDeNegocio(404, "La reserva no existe");
       const eventoId = inicial.rows[0].evento_id;
       const evento = await client.query(
-        "SELECT id, capacidad FROM evento WHERE id = $1 FOR UPDATE",
+        "SELECT id, capacidad, agente_id FROM evento WHERE id = $1 FOR UPDATE",
         [eventoId],
       );
 
@@ -233,6 +234,16 @@ router.patch(
         (req.usuario.rol === "cliente" && reserva.cliente_id !== req.usuario.id)
       ) {
         throw new ErrorDeNegocio(404, "La reserva no existe");
+      }
+      // Un agente solo administra las reservas de los eventos que él creó
+      if (
+        req.usuario.rol === "agente" &&
+        evento.rows[0].agente_id !== req.usuario.id
+      ) {
+        throw new ErrorDeNegocio(
+          403,
+          "Esa reserva es de un evento de otro agente: solo puedes administrar las de tus eventos",
+        );
       }
 
       if (reserva.estado !== estado) {
@@ -329,7 +340,7 @@ router.put(
         throw new ErrorDeNegocio(404, "La reserva no existe");
       const eventoId = inicial.rows[0].evento_id;
       const eventoFila = await client.query(
-        `SELECT e.capacidad, e.precio_base::float8 AS precio, ee.nombre AS estado
+        `SELECT e.capacidad, e.precio_base::float8 AS precio, ee.nombre AS estado, e.agente_id
          FROM evento e
          JOIN estado_evento ee ON ee.id = e.estado_evento_id
         WHERE e.id = $1
@@ -351,6 +362,13 @@ router.put(
         (req.usuario.rol === "cliente" && reserva.cliente_id !== req.usuario.id)
       ) {
         throw new ErrorDeNegocio(404, "La reserva no existe");
+      }
+      // Un agente solo administra las reservas de los eventos que él creó
+      if (req.usuario.rol === "agente" && evento.agente_id !== req.usuario.id) {
+        throw new ErrorDeNegocio(
+          403,
+          "Esa reserva es de un evento de otro agente: solo puedes administrar las de tus eventos",
+        );
       }
       if (req.usuario.rol === "cliente" && reserva.estado !== "Reservada") {
         throw new ErrorDeNegocio(
@@ -414,6 +432,22 @@ router.delete("/:id", verificarToken, exigirRol("agente"), async (req, res) => {
   if (id === null)
     return res.status(400).json({ error: "El id de la reserva no es válido" });
   try {
+    // Un agente solo elimina reservas de los eventos que él creó
+    const dueno = await pool.query(
+      `SELECT ev.agente_id
+         FROM reserva r
+         JOIN evento ev ON ev.id = r.evento_id
+        WHERE r.id = $1`,
+      [id],
+    );
+    if (!dueno.rows[0])
+      return res.status(404).json({ error: "La reserva no existe" });
+    if (dueno.rows[0].agente_id !== req.usuario.id) {
+      return res.status(403).json({
+        error:
+          "Esa reserva es de un evento de otro agente: solo puedes administrar las de tus eventos",
+      });
+    }
     // Un solo paso: borra únicamente si la reserva está cancelada
     const borrada = await pool.query(
       `DELETE FROM reserva
