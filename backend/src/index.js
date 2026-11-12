@@ -17,7 +17,13 @@ if (!process.env.JWT_SECRET) {
 }
 
 const app = express();
-app.use(cors({ origin: ["http://localhost:8443"] }));
+   // Orígenes permitidos: CORS_ORIGIN puede traer varias URLs separadas por coma.
+   // Sin la variable, solo el entorno local.
+   const origenesPermitidos = (process.env.CORS_ORIGIN || "http://localhost:8443")
+     .split(",")
+     .map((o) => o.trim().replace(/\/$/, ""))
+     .filter(Boolean);
+   app.use(cors({ origin: origenesPermitidos }));
 // Límite alto porque un evento puede traer una imagen subida (en base64)
 
 // El webhook de Stripe tiene que ir ANTES de express.json(): Stripe firma el cuerpo tal
