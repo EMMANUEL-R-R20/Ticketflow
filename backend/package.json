@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "node --watch --watch-preserve-output --watch-path=./src src/index.js",
     "seed": "node src/seed.js",
-    "municipios": "node src/municipios.js"
+    "municipios": "node src/municipios.js",
+    "datos-demo": "node src/datos-demo.js"
   },
   "keywords": [],
   "author": "",

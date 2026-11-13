@@ -150,6 +150,22 @@ router.get("/", async (_req, res) => {
   }
 });
 
+// GET /api/eventos/mios — los ids de los eventos que creó el agente que inició sesión.
+// La identificación del agente no viaja con cada evento (el listado es público y es un dato
+// personal): cada agente pregunta aquí cuáles son suyos. Va antes de «/:id».
+router.get("/mios", verificarToken, exigirRol("agente"), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT id FROM evento WHERE agente_id = $1 ORDER BY id",
+      [req.usuario.id],
+    );
+    res.json(rows.map((r) => r.id));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudieron consultar tus eventos" });
+  }
+});
+
 // GET /api/eventos/:id
 router.get("/:id", async (req, res) => {
   const id = idDeLaRuta(req);
@@ -232,6 +248,17 @@ router.put("/:id", verificarToken, exigirRol("agente"), async (req, res) => {
     if (!existente)
       return res.status(404).json({ error: "El evento no existe" });
 
+    // Un agente solo puede modificar los eventos que él creó
+    const dueno = await pool.query(
+      "SELECT agente_id FROM evento WHERE id = $1",
+      [id],
+    );
+    if (dueno.rows[0].agente_id !== req.usuario.id) {
+      return res.status(403).json({
+        error: "Ese evento es de otro agente: solo puedes modificar los tuyos",
+      });
+    }
+
     const reservadas = existente.capacidad - existente.disponibles;
     if (datos.capacidad < reservadas) {
       return res.status(400).json({
@@ -276,6 +303,18 @@ router.delete("/:id", verificarToken, exigirRol("agente"), async (req, res) => {
   if (id === null)
     return res.status(400).json({ error: "El id del evento no es válido" });
   try {
+    const dueno = await pool.query(
+      "SELECT agente_id FROM evento WHERE id = $1",
+      [id],
+    );
+    if (!dueno.rows[0])
+      return res.status(404).json({ error: "El evento no existe" });
+    // Un agente solo puede eliminar los eventos que él creó
+    if (dueno.rows[0].agente_id !== req.usuario.id) {
+      return res.status(403).json({
+        error: "Ese evento es de otro agente: solo puedes eliminar los tuyos",
+      });
+    }
     const { rows } = await pool.query(
       "DELETE FROM evento WHERE id = $1 RETURNING id",
       [id],

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   ReservaStatus,
   Reserva,
@@ -21,6 +21,7 @@ import { PageHeader } from "../../../views/layouts/PageHeader";
 export function AgentReservations({
   reservas,
   eventos,
+  misIds,
   cambiarEstadoReserva,
   cancelarReserva,
   editarReserva,
@@ -29,6 +30,8 @@ export function AgentReservations({
   onNav: (s: Screen, r?: Role, eventId?: number | null) => void;
   reservas: Reserva[];
   eventos: Evento[];
+  // Ids de los eventos de este agente; null mientras se cargan
+  misIds: number[] | null;
   cambiarEstadoReserva: (id: number, estado: ReservaStatus) => Promise<void>;
   cancelarReserva: (id: number, causa: string) => Promise<void>;
   editarReserva: (
@@ -43,6 +46,22 @@ export function AgentReservations({
   const [editando, setEditando] = useState<Reserva | null>(null);
   const [eliminando, setEliminando] = useState<Reserva | null>(null);
   const eventoDe = (r: Reserva) => eventos.find((e) => e.id === r.eventoId)!;
+
+  // «De mis eventos»: las reservas de los eventos de este agente, que sí puede administrar.
+  // «Todas»: todas las reservas, solo para consultar.
+  const [pestana, setPestana] = useState<"mias" | "todas">("mias");
+  const cargando = misIds === null;
+  const propios = useMemo(() => new Set(misIds ?? []), [misIds]);
+  const validas = reservas.filter((r) =>
+    eventos.some((e) => e.id === r.eventoId),
+  );
+  const mias = validas.filter((r) => propios.has(r.eventoId));
+  const editable = pestana === "mias";
+  const lista = editable ? mias : validas;
+  const pestanas: { id: "mias" | "todas"; texto: string; cuantos: number | null }[] = [
+    { id: "mias", texto: "De mis eventos", cuantos: cargando ? null : mias.length },
+    { id: "todas", texto: "Todas", cuantos: validas.length },
+  ];
 
   // Cancelar pide el motivo (en una ventana); confirmar o reactivar se hace directo.
   // Reactivar una cancelada exige cupo: si no hay, el servidor responde con un mensaje.
@@ -66,6 +85,39 @@ export function AgentReservations({
         title="Gestión de Reservas"
         subtitle="Administra las reservas recibidas en tus eventos"
       />
+      <div
+        role="tablist"
+        aria-label="Qué reservas ver"
+        className="flex flex-wrap gap-2 mb-4"
+      >
+        {pestanas.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            role="tab"
+            aria-selected={pestana === p.id}
+            onClick={() => setPestana(p.id)}
+            className={`px-4 py-2 rounded-full text-sm font-semibold border transition cursor-pointer ${pestana === p.id ? "bg-violet-700 border-violet-700 text-white" : "bg-white border-gray-200 text-gray-600 hover:bg-violet-50"}`}
+          >
+            {p.texto}
+            <span
+              className={`ml-2 text-xs rounded-full px-2 py-0.5 ${pestana === p.id ? "bg-white/25 text-white" : "bg-violet-100 text-violet-800"}`}
+            >
+              {p.cuantos ?? "…"}
+            </span>
+          </button>
+        ))}
+      </div>
+      {!editable && (
+        <div
+          role="note"
+          className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-xl p-3 mb-4"
+        >
+          Solo puedes administrar las reservas de <b>tus</b> eventos. Estas se
+          muestran para consultar; para cambiarlas, usa la pestaña «De mis
+          eventos».
+        </div>
+      )}
       {aviso && (
         <div
           role="alert"
@@ -83,12 +135,13 @@ export function AgentReservations({
                   "ID",
                   "Cliente",
                   "Evento",
+                  ...(editable ? [] : ["Agente del evento"]),
                   "Fecha reserva",
                   "Entradas",
                   "Total",
                   "Estado",
                   "Observaciones",
-                  "Acción",
+                  ...(editable ? ["Acción"] : []),
                 ].map((h) => (
                   <th
                     key={h}
@@ -100,20 +153,21 @@ export function AgentReservations({
               </tr>
             </thead>
             <tbody>
-              {reservas.filter((r) => eventos.some((e) => e.id === r.eventoId))
-                .length === 0 && (
+              {lista.length === 0 && (
                 <tr>
                   <td
                     colSpan={9}
-                    className="px-4 py-10 text-center text-sm text-gray-400"
+                    className="px-4 py-10 text-center text-sm text-gray-500"
                   >
-                    Todavía no hay reservas.
+                    {editable
+                      ? cargando
+                        ? "Cargando tus reservas…"
+                        : "Todavía no hay reservas en tus eventos."
+                      : "Todavía no hay reservas."}
                   </td>
                 </tr>
               )}
-              {reservas
-                .filter((r) => eventos.some((e) => e.id === r.eventoId))
-                .map((r) => {
+              {lista.map((r) => {
                   const ev = eventoDe(r);
                   // Una reserva cancelada solo se puede reactivar si hay cupo para ella
                   const sinCupo =
@@ -133,6 +187,12 @@ export function AgentReservations({
                       <td className="px-4 py-3.5 text-sm text-gray-600 max-w-36 truncate">
                         {ev.nombre}
                       </td>
+                      {!editable && (
+                        <td className="px-4 py-3.5 text-sm text-gray-600">
+                          {ev.agente}
+                          {propios.has(r.eventoId) ? " (tú)" : ""}
+                        </td>
+                      )}
                       <td className="px-4 py-3.5 text-sm text-gray-600">
                         {fmtDate(r.fechaReserva)}
                       </td>
@@ -148,6 +208,7 @@ export function AgentReservations({
                       <td className="px-4 py-3.5 text-xs text-gray-500 max-w-32 truncate">
                         {r.observaciones || "—"}
                       </td>
+                      {editable && (
                       <td className="px-4 py-3.5">
                         <select
                           value={r.estado}
@@ -189,6 +250,7 @@ export function AgentReservations({
                           )}
                         </div>
                       </td>
+                      )}
                     </tr>
                   );
                 })}
