@@ -136,7 +136,7 @@ export function LandingPage({
                 border: `1px solid ${PRIMARY}55`,
               }}
             >
-              🎟️ La plataforma de eventos más completa de Rusia
+              🎟️ La plataforma de eventos más completa de Colombia
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white leading-tight mb-6">
               Vive cada{" "}
