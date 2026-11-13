@@ -220,7 +220,7 @@ export function HeroArt() {
         </svg>
       </div>
       {/* Micrófono */}
-      <div className="h-24 sm:h-28 rounded-5xl overflow-hidden">
+      <div className="h-24 sm:h-28 rounded-2xl overflow-hidden">
         <svg
           viewBox="0 0 300 136"
           preserveAspectRatio="xMidYMid slice"
