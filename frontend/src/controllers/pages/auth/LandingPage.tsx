@@ -244,7 +244,7 @@ export function LandingPage({
       </section>
 
       {/* Cómo funciona */}
-      <section className="py-12 bg-white">
+      <section className="py-12 bg-white" id="como-funciona">
         <div className="max-w-6xl mx-auto px-5 sm:px-8">
           <div
             data-reveal
@@ -352,20 +352,50 @@ export function LandingPage({
         className="pt-10 pb-6 text-gray-400 text-sm"
       >
         <div className="max-w-6xl mx-auto px-5 sm:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-8 pb-10 border-b border-white/10">
-            <div className="max-w-xs">
-              <Logo size="sm" on="dark" />
-              <p className="mt-4 leading-relaxed">
-                Descubre, reserva y disfruta los mejores eventos de teatro,
-                música y espectáculos en un solo lugar.
-              </p>
-            </div>
-            <div>
-              <p className="text-white font-semibold text-xs uppercase tracking-wide mb-3">
-                Síguenos
-              </p>
-              <SocialIcons size={60} />
-            </div>
+          <div className="flex flex-col items-center text-center gap-6 pb-10 border-b border-white/10">
+            <Logo size="sm" on="dark" />
+            <p className="max-w-xl leading-relaxed">
+              Descubre, reserva y disfruta los mejores eventos de teatro, música
+              y espectáculos en un solo lugar.
+            </p>
+            <nav
+              aria-label="Enlaces del pie de página"
+              className="flex flex-wrap justify-center gap-x-7 gap-y-2"
+            >
+              <a
+                href="#eventos"
+                className="text-gray-300 hover:text-white font-medium transition"
+              >
+                Eventos
+              </a>
+              <a
+                href="#como-funciona"
+                className="text-gray-300 hover:text-white font-medium transition"
+              >
+                ¿Cómo funciona?
+              </a>
+              <a
+                href="#nosotros"
+                className="text-gray-300 hover:text-white font-medium transition"
+              >
+                Nosotros
+              </a>
+              <button
+                type="button"
+                onClick={() => onNav("login")}
+                className="text-gray-300 hover:text-white font-medium transition cursor-pointer"
+              >
+                Iniciar sesión
+              </button>
+              <button
+                type="button"
+                onClick={() => onNav("register")}
+                className="text-gray-300 hover:text-white font-medium transition cursor-pointer"
+              >
+                Registrarse
+              </button>
+            </nav>
+            <SocialIcons size={60} />
           </div>
           <div className="flex items-center justify-between gap-6 pt-6 flex-wrap">
             <div className="text-xs text-gray-500">
