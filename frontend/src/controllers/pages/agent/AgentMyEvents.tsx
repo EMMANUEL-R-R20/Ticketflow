@@ -97,14 +97,14 @@ function DetalleEvento({
         role="dialog"
         aria-modal="true"
         aria-labelledby="detalle-evento-titulo"
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative">
           <img
             src={unsplash(ev.imagen, 900, 360)}
             alt={ev.nombre}
-            className="w-full h-40 object-cover rounded-t-3xl"
+            className="w-full h-48 object-cover rounded-t-3xl"
           />
           <button
             type="button"
@@ -115,7 +115,7 @@ function DetalleEvento({
             ✕
           </button>
         </div>
-        <div className="p-6">
+        <div className="p-7">
           <div className="flex items-start justify-between gap-3">
             <h2
               id="detalle-evento-titulo"
