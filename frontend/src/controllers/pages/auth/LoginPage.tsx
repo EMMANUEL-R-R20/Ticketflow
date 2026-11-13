@@ -105,7 +105,7 @@ export function LoginPage({
           </h2>
           <p className="text-gray-300 text-base leading-relaxed max-w-xs mb-10">
             Gestiona reservas, descubre eventos y vive experiencias únicas desde
-            una sola plataforma
+            una sola plataforma..
           </p>
 
           {/* event preview cards */}
